@@ -10,4 +10,8 @@ To run:
 
 ```bash
 bun start '/path/to/lyric.lrc'
+
+# or
+
+bun start '/path/to/'
 ```

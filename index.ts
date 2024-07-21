@@ -1,4 +1,5 @@
 import fs from "fs";
+import { glob } from "glob";
 
 function formatTime(min: string, sec: string, ms: string): string {
   return `00:${min}:${sec},${ms.padEnd(3, "0")}`;
@@ -67,7 +68,9 @@ function output(path: string, data: string) {
 
 function handleFile(path: string) {
   const content = readFile(path);
-  output(path.replace(/\.lrc/i, ".srt"), lrc2srt(content));
+  const target = path.replace(/\.lrc/i, ".srt");
+  output(target, lrc2srt(content));
+  return target;
 }
 
 async function start() {
@@ -80,12 +83,19 @@ async function start() {
   const stat = fs.statSync(fileOrDirectory);
 
   if (stat.isFile()) {
-    handleFile(fileOrDirectory);
+    console.log(`[lrc2srt start]: ${fileOrDirectory}`);
+    const target = handleFile(fileOrDirectory);
+    console.log(`[lrc2srt done]: ${target}`);
     return;
   }
 
   if (stat.isDirectory()) {
-    console.log("directory");
+    const lrcs = await glob(`${fileOrDirectory}/*.lrc`);
+    for await (const lrc of lrcs) {
+      console.log(`[lrc2srt start]: ${lrc}`);
+      const target = handleFile(lrc);
+      console.log(`[lrc2srt done]: ${target}`);
+    }
     return;
   }
 }
