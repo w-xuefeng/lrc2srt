@@ -26,7 +26,7 @@ function lrc2srt(lrc: string): string {
   let index = 1;
 
   for (let i = 0; i < lines.length; i++) {
-    const match = lines[i].match(/\[(\d{2}):(\d{2}).(\d{2})\](.*)/);
+    const match = lines[i].match(/\[(\d{2}):(\d{2}).(\d{2,3})\](.*)/);
     if (match) {
       const [, min, sec, ms, text] = match;
       const trimmedText = text.trim();
