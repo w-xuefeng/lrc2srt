@@ -1,61 +1,94 @@
 import fs from "fs";
 import { glob } from "glob";
 
-function formatTime(min: string, sec: string, ms: string): string {
-  return `00:${min}:${sec},${ms.padEnd(3, "0")}`;
-}
+// function formatTime(min: string, sec: string, ms: string): string {
+//   return `00:${min}:${sec},${ms.padEnd(3, "0").slice(0, 3)}`;
+// }
 
-function addDefaultDuration(time: string, duration: number): string {
-  const [hour, min, secMs] = time.split(":");
-  const [sec, ms] = secMs.split(",");
-  let totalSeconds =
-    parseInt(hour) * 3600 + parseInt(min) * 60 + parseInt(sec) + duration;
-  let hours = Math.floor(totalSeconds / 3600);
-  totalSeconds %= 3600;
-  let minutes = Math.floor(totalSeconds / 60);
-  let seconds = totalSeconds % 60;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(
-    2,
-    "0"
-  )}:${String(seconds).padStart(2, "0")},${ms}`;
+// function addDefaultDuration(time: string, duration: number): string {
+//   const [hour, min, secMs] = time.split(":");
+//   const [sec, ms] = secMs.split(",");
+//   const totalSeconds =
+//     parseInt(hour) * 3600 + parseInt(min) * 60 + parseInt(sec) + duration;
+//   const nextHours = Math.floor(totalSeconds / 3600);
+//   const restHours = totalSeconds % 3600;
+//   const minutes = Math.floor(restHours / 60);
+//   const seconds = restHours % 60;
+
+//   return `${String(nextHours).padStart(2, "0")}:${String(minutes).padStart(
+//     2,
+//     "0"
+//   )}:${String(seconds).padStart(2, "0")},${ms}`;
+// }
+
+const formatMSTime = (ms: number): string => {
+  const pad = (n: number, z = 2) => `${n}`.padStart(z, "0");
+  return `${pad(Math.floor(ms / 3600000))}:${pad(
+    Math.floor((ms % 3600000) / 60000)
+  )}:${pad(Math.floor((ms % 60000) / 1000))},${pad(ms % 1000, 3)}`;
+};
+
+function parseTime(timeStr: string): number {
+  const [, minutes, seconds, milliseconds] =
+    timeStr.match(/(\d{2}):(\d{2})\.(\d+)/) || [];
+  return (
+    (parseInt(minutes) * 60 + parseInt(seconds)) * 1000 +
+    parseInt(milliseconds.padEnd(3, "0").slice(0, 3))
+  );
 }
 
 function lrc2srt(lrc: string): string {
-  const lines = lrc.split("\n");
-  const srtLines = [];
-  let index = 1;
+  const timeRegex = /\[(\d{2}):(\d{2})\.(\d+)\]/g;
+  const lines = lrc.trim().split("\n");
 
-  for (let i = 0; i < lines.length; i++) {
-    const match = lines[i].match(/\[(\d{2}):(\d{2}).(\d{2,3})\](.*)/);
-    if (match) {
-      const [, min, sec, ms, text] = match;
-      const trimmedText = text.trim();
-      if (trimmedText) {
-        const startTime = formatTime(min, sec, ms);
-        let endTime = "00:00:00,000";
+  const lyrics: { startTime: number; endTime: number; text: string }[] = [];
 
-        if (i + 1 < lines.length) {
-          const nextMatch = lines[i + 1].match(/\[(\d{2}):(\d{2}).(\d{2})\]/);
-          if (nextMatch) {
-            const [, nextMin, nextSec, nextMs] = nextMatch;
-            endTime = formatTime(nextMin, nextSec, nextMs);
-          } else {
-            endTime = addDefaultDuration(startTime, 5);
-          }
-        } else {
-          endTime = addDefaultDuration(startTime, 5);
-        }
-
-        srtLines.push(`${index}`);
-        srtLines.push(`${startTime} --> ${endTime}`);
-        srtLines.push(`${trimmedText}`);
-        srtLines.push("");
-        index++;
-      }
+  lines.forEach((line) => {
+    const times = Array.from(line.matchAll(timeRegex));
+    if (times.length > 0) {
+      const text = line.replace(timeRegex, "").trim();
+      times.forEach((time) => {
+        const startTime = parseTime(time[0]);
+        lyrics.push({
+          startTime,
+          text,
+          endTime: 0,
+        });
+      });
     }
+  });
+
+  lyrics.sort((a, b) => a.startTime - b.startTime);
+
+  const handleEndTimeLyrics = lyrics.map((e, i) => {
+    if (i === lyrics.length - 1) {
+      return e;
+    }
+    e.endTime = lyrics[i + 1].startTime;
+    return e;
+  });
+
+  if (handleEndTimeLyrics.length > 0) {
+    const lastLyric = handleEndTimeLyrics[handleEndTimeLyrics.length - 1];
+    const totalDuration =
+      lastLyric.startTime - handleEndTimeLyrics[0].startTime;
+    const averageDuration = totalDuration / handleEndTimeLyrics.length;
+    lastLyric.endTime = Math.max(
+      lastLyric.startTime + 5000,
+      lastLyric.startTime + averageDuration
+    );
   }
 
-  return srtLines.join("\n");
+  return handleEndTimeLyrics
+    .map((lyric, index) =>
+      [
+        index + 1,
+        `${formatMSTime(lyric.startTime)} --> ${formatMSTime(lyric.endTime)}`,
+        lyric.text,
+        "",
+      ].join("\n")
+    )
+    .join("\n");
 }
 
 function readFile(path: string) {
@@ -69,6 +102,7 @@ function output(path: string, data: string) {
 function handleFile(path: string) {
   const content = readFile(path);
   const target = path.replace(/\.lrc/i, ".srt");
+  lrc2srt(content);
   output(target, lrc2srt(content));
   return target;
 }
