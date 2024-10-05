@@ -49,11 +49,13 @@ function lrc2srt(lrc: string): string {
       const text = line.replace(timeRegex, "").trim();
       times.forEach((time) => {
         const startTime = parseTime(time[0]);
-        lyrics.push({
-          startTime,
-          text,
-          endTime: 0,
-        });
+        if (!lyrics.some((e) => e.startTime === startTime)) {
+          lyrics.push({
+            startTime,
+            text,
+            endTime: 0,
+          });
+        }
       });
     }
   });
@@ -102,7 +104,6 @@ function output(path: string, data: string) {
 function handleFile(path: string) {
   const content = readFile(path);
   const target = path.replace(/\.lrc/i, ".srt");
-  lrc2srt(content);
   output(target, lrc2srt(content));
   return target;
 }
